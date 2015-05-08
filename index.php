@@ -21,9 +21,9 @@ class CityParser {
 
 	static public function getInstance()
 	{
-        if(self::$instance == NULL) self::$instance = new self;
-        return self::$instance;
-    }
+		if(self::$instance == NULL) self::$instance = new self;
+		return self::$instance;
+	}
 
 	private function parseRegions()
 	{
