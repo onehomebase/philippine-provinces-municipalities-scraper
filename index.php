@@ -4,15 +4,22 @@ use GuzzleHttp\Client;
 use Symfony\Component\DomCrawler\Crawler;
 
 
-class CityParser {
+class TownsParser {
 	private $client;
-	private $crawler;
+
 	private $base_url = 'http://www.nscb.gov.ph/activestats/psgc';
+
 	private $regions = [];
 	private $provinces = [];
-	private $cities = [];
+	private $municipalities = [];
+	private $all = [];
+
 	private static $instance;
-	private static $areas = ['Regions','Provinces','Cities'];
+	private static $areas = ['Regions','Provinces','Municipalities'];
+
+	const REGIONS = 'regions';
+	const PROVINCES = 'provinces';
+	const MUNICIPALITIES = 'municipalities';
 
 	public function __construct()
 	{
@@ -27,8 +34,8 @@ class CityParser {
 
 	private function parseRegions()
 	{
-		$response_region = $this->client->get($this->base_url . "/listreg.asp");
-		$this->crawlHtml($response_region->getBody(), 'table p.headline a', 'regions');
+		$response = $this->client->get($this->base_url . "/listreg.asp");
+		$this->crawlHtml($response->getBody(), 'table p.headline a', self::REGIONS, []);
 	}
 
 	private function parseProvinces()
@@ -36,24 +43,27 @@ class CityParser {
 		$regions = self::getArea('Regions');
 		foreach ($regions as $region)
 		{
-			$region_link = $region[1];
-			$response_province = $this->client->get($region_link);
-			$this->crawlHtml($response_province->getBody(), '.dataCellp a', 'provinces');
+			$region_link = $region['region_link'];
+			$region_id = $region['region_id'];
+			$response = $this->client->get($region_link);
+			$this->crawlHtml($response->getBody(), '.dataCellp a', self::PROVINCES, ['region_id'=>$region_id]);
 		}
 	}
 
-	private function parseCities()
+	private function parseMunicipalities()
 	{
 		$provinces = self::getArea('Provinces');
 		foreach ($provinces as $province)
 		{
-			$city_link = $province[1];
-			$response_city = $this->client->get($city_link);
-			$this->crawlHtml($response_city->getBody(), 'table p.dataCellp a', 'cities');
+			$province_link = $province['province_link'];
+			$province_id = $province['province_id'];
+			$region_id = $province['region_id'];
+			$response = $this->client->get($province_link);
+			$this->crawlHtml($response->getBody(), 'table p.dataCellp a', self::MUNICIPALITIES, ['province_id'=>$province_id,'region_id'=>$region_id]);
 		}
 	}
 
-	private function crawlHtml($body,$selector,$area_array)
+	private function crawlHtml($body,$selector,$area_array,$ids)
 	{
 		if ($body)
 		{
@@ -65,7 +75,27 @@ class CityParser {
 			{
 				$area_name = $area->textContent;
 				$area_link = $this->base_url. "/" . $area->getAttribute('href');
-				array_push($this->{"$area_array"}, [$area_name,$area_link]);
+				if ($area_array=='regions')
+				{
+					$id = str_replace("region=","",parse_url($area_link,PHP_URL_QUERY));
+					$params = ['region_name'=>$area_name,'region_link'=>$area_link,'region_id'=>$id];
+					$this->all['regions'][$id] = $params;
+				}else if ($area_array=='provinces')
+				{
+					$query_string = parse_url($area_link,PHP_URL_QUERY);
+					parse_str($query_string, $query_stringed);
+					$id = $query_stringed['provCode'];
+					$params = ['province_name'=>$area_name,'province_link'=>$area_link,'province_id'=>$id,'region_id'=>$ids['region_id']];
+					$this->all['regions'][$ids['region_id']][$area_array][$id] = $params;
+				}else
+				{
+					$query_string = parse_url($area_link,PHP_URL_QUERY);
+					parse_str($query_string, $query_stringed);
+					$id = $query_stringed['muncode'];
+					$params = ['municipality_name'=>$area_name,'municipality_link'=>$area_link,'municipality_id'=>$id,'province_id'=>$ids['province_id'],'region_id'=>$ids['region_id']];
+					$this->all['regions'][$ids['region_id']]['provinces'][$ids['province_id']][$area_array][$id] = $params;
+				}
+				array_push($this->{"$area_array"}, $params);
 			}
 		}
 	}
@@ -80,6 +110,19 @@ class CityParser {
 			echo "No such area: " . $area;
 		}
 	}
+
+	public static function getJson($area)
+	{
+		if ( in_array($area, self::$areas) )
+		{
+			self::getInstance()->{"parse$area"}();
+			return self::getInstance()->all;
+		}else {
+			echo "No such area: " . $area;
+		}
+	}
 }
 
-print_r(CityParser::getArea("Cities"));
+echo $municipalities = json_encode(TownsParser::getJson("Municipalities"));
+$myfile = fopen("municipalities.json", "w") or die("Unable to open file!");
+fwrite($myfile, $municipalities);
