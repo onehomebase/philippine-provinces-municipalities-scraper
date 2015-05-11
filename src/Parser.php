@@ -21,14 +21,17 @@ class Parser {
 	const PROVINCES = 'provinces';
 	const MUNICIPALITIES = 'municipalities';
 
-	public function __construct()
+	private $hook;
+
+	public function __construct(ParserHookInterface $hook)
 	{
 		$this->client = new Client();
+		$this->hook = $hook;
 	}
 
 	static public function getInstance()
 	{
-		if(self::$instance == NULL) self::$instance = new self;
+		if(self::$instance == NULL) self::$instance = IoC::make('parser');
 		return self::$instance;
 	}
 
@@ -96,6 +99,8 @@ class Parser {
 					$this->all['regions'][$ids['region_id']]['provinces'][$ids['province_id']][$area_array][$id] = $params;
 				}
 				array_push($this->{"$area_array"}, $params);
+
+				$this->hook->save($params);
 			}
 		}
 	}
