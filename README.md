@@ -1,6 +1,6 @@
-#Philippine Regions, Provinces, Municipalities scraper
+# Philippine Regions, Provinces, Municipalities scraper
 
-##Usage
+## Usage
 All returns are in json format
 
 ```
